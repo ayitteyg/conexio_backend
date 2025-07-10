@@ -37,7 +37,7 @@ if not SECRET_KEY:
 
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = False
+DEBUG = True
 
 ALLOWED_HOSTS = [
      'localhost',
@@ -161,27 +161,27 @@ CORS_ALLOW_METHODS = [
 
 
 """ switch to this if in production with DATABASE_URL set """
-DATABASES = {}
+# DATABASES = {}
 
-if 'DATABASE_URL' in os.environ:
-    db_url = urlparse(os.getenv('DATABASE_URL'))
-    DATABASES['default'] = {
-        'ENGINE': 'django.db.backends.postgresql',
-        'NAME': db_url.path[1:],  # removes leading '/'
-        'USER': db_url.username,
-        'PASSWORD': db_url.password,
-        'HOST': db_url.hostname,
-        'PORT': db_url.port or 5432,
-        'OPTIONS': {
-            'connect_timeout': 10,
-            'sslmode': 'require',
-        },
-    }
-else: #fall back the local
-    DATABASES['default'] = {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
-    }
+# if 'DATABASE_URL' in os.environ:
+#     db_url = urlparse(os.getenv('DATABASE_URL'))
+#     DATABASES['default'] = {
+#         'ENGINE': 'django.db.backends.postgresql',
+#         'NAME': db_url.path[1:],  # removes leading '/'
+#         'USER': db_url.username,
+#         'PASSWORD': db_url.password,
+#         'HOST': db_url.hostname,
+#         'PORT': db_url.port or 5432,
+#         'OPTIONS': {
+#             'connect_timeout': 10,
+#             'sslmode': 'require',
+#         },
+#     }
+# else: #fall back the local
+#     DATABASES['default'] = {
+#         'ENGINE': 'django.db.backends.sqlite3',
+#         'NAME': BASE_DIR / 'db.sqlite3',
+#     }
 
 
 # Password validation
