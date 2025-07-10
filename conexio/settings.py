@@ -242,3 +242,7 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 
 WSGI_APPLICATION = 'conexio.wsgi.application'
+
+
+
+AUTH_USER_MODEL = 'customers.User'

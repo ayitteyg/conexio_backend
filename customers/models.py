@@ -1,5 +1,6 @@
 from django.db import models
 from django.contrib.auth.models import User
+from django.contrib.auth.models import AbstractUser
 
 # Create your models here.
 from django.db import models
@@ -15,6 +16,10 @@ def validate_phone(value):
     if not pattern.match(value):
         raise ValidationError("Invalid phone number format.")
 
+
+class User(AbstractUser):
+    # Add custom fields here if any
+    pass
 
 class Feature(models.Model):
     """ represent individual features, ex. email support, advance reports, etc """
