@@ -15,7 +15,7 @@ class Command(BaseCommand):
             user = User.objects.create_superuser(
                 username='admin',
                 password='my-mtn-0549',
-                email='sdaachimotadistrict@gmail.com'
+                email='ayitteyg.og@gmail.com'
             )
             self.stdout.write(self.style.SUCCESS(f'Created superuser: {user.username}'))
         except Exception as e:
