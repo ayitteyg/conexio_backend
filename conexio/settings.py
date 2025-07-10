@@ -102,7 +102,7 @@ WSGI_APPLICATION = 'conexio.wsgi.application'
 
 # Allow only your frontend (don't use '*')
 CORS_ALLOWED_ORIGINS = [
-    "https://conexio.onrender.com"
+    "https://conexio.onrender.com",
     "http://localhost:4200",         # Optional: for local dev
     "http://127.0.0.1:4200", 
     "http://127.0.0.1:8000",  # Angular default dev server
