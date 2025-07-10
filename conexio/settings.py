@@ -55,6 +55,7 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+     "corsheaders",
 
     # Third-party apps
     'rest_framework',              # ✅ Required for DRF
@@ -101,6 +102,7 @@ WSGI_APPLICATION = 'conexio.wsgi.application'
 
 # Allow only your frontend (don't use '*')
 CORS_ALLOWED_ORIGINS = [
+    "https://conexio.onrender.com"
     "http://localhost:4200",         # Optional: for local dev
     "http://127.0.0.1:4200", 
     "http://127.0.0.1:8000",  # Angular default dev server
@@ -112,6 +114,11 @@ CORS_ALLOWED_ORIGINS = [
 # Allow cookies, tokens, etc. to be sent
 CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOW_ALL_ORIGINS = False  # keep this false
+
+
+CSRF_TRUSTED_ORIGINS = [
+     "https://conexio.onrender.com"
+]
 
 
 
