@@ -17,11 +17,14 @@ class SubscriptionPlanAdmin(admin.ModelAdmin):
 
 @admin.register(Vendor)
 class VendorAdmin(admin.ModelAdmin):
-    list_display = ('name', 'biz_name', 'biz_location', 'biz_contact', 'biz_mail', 'subscription_plan')
-    search_fields = ('name', 'biz_name', 'biz_mail')
+    list_display = ('fullname', 'biz_name', 'biz_location', 'biz_contact', 'biz_mail', 'subscription_plan', 'paystack_connected', 'subscription_active')
+    search_fields = ('fullname', 'biz_name', 'biz_mail', 'subscription_active')
 
 
 @admin.register(User)
 class UserAdmin(BaseUserAdmin):
     list_display = ('username', 'email', 'is_staff', 'is_active', 'date_joined')
     search_fields = ('username', 'email')
+    
+    
+        

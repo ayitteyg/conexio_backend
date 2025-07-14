@@ -1,5 +1,6 @@
 from django.db import models
 from django.contrib.auth.models import AbstractUser
+from django.conf import settings
 
 # Create your models here.
 from django.db import models
@@ -49,25 +50,28 @@ class SubscriptionPlan(models.Model):
         return [f.name for f in self.features.all()]
 
 
-
 class Vendor(models.Model):
-    
     """ clients are linked to subscription plan with get_features function
-           example:
+        example:
             biz = Vendor.objects.get(id=1)
             print(biz.get_features())  
             # Output: ['Email Support', 'Advanced Reports']
     """
-    user = models.OneToOneField(User, on_delete=models.CASCADE)
-    name = models.CharField(max_length=255)
+    user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    fullname = models.CharField(max_length=255)
     biz_name = models.CharField(max_length=255, default="")
     biz_location = models.CharField(max_length=255, default="")
     biz_contact = models.CharField(max_length=20, validators=[validate_phone], default="")
     biz_mail = models.CharField(max_length=255, default="")
-    subscription_plan = models.ForeignKey(SubscriptionPlan, on_delete=models.SET_NULL, null=True)
+    subscription_plan = models.ForeignKey('SubscriptionPlan', on_delete=models.SET_NULL, null=True)
+
+    # Paystack fields
+    paystack_secret = models.CharField(max_length=255, blank=True, null=True)
+    paystack_connected = models.BooleanField(default=False)
+    subscription_active = models.BooleanField(default=False)
 
     def __str__(self):
-        return self.name
+        return self.fullname
 
     def get_features(self):
         if self.subscription_plan:
