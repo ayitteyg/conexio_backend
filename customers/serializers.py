@@ -22,3 +22,14 @@ class VendorSerializer(serializers.ModelSerializer):
         user = User.objects.create_user(**user_data)
         vendor = Vendor.objects.create(user=user, **validated_data)
         return vendor
+
+
+
+class VendorListSerializer(serializers.ModelSerializer):
+    subscription_plan = serializers.CharField(source="subscription_plan.name", read_only=True)
+    class Meta:
+        model = Vendor
+        fields = [
+            "id", "fullname", "biz_name", "biz_location", "biz_contact", "biz_mail",
+            "subscription_plan", "paystack_connected", "subscription_active"
+        ]

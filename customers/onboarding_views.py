@@ -9,7 +9,7 @@ from rest_framework import status
 from rest_framework_simplejwt.tokens import RefreshToken, TokenError
 from django.contrib.auth import authenticate
 from django.contrib.auth.decorators import login_required
-from . models import Vendor, SubscriptionPlan
+from .models import Vendor, SubscriptionPlan
 
 from django.contrib.auth import get_user_model
 User = get_user_model()
@@ -230,3 +230,51 @@ def verify_transaction(request, reference):
     return Response({"error": "Verification failed"}, status=400)
 
 
+
+#getting client customers
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_paystack_customers(request):
+    """
+    Retrieve all customers from the Paystack account linked to the authenticated vendor.
+
+    Requirements:
+    - User must be authenticated
+    - Vendor must exist and have connected a Paystack secret key
+
+    Returns:
+    - 200 OK with list of customers from Paystack
+    - 400 Bad Request if Paystack is not connected or Paystack API fails
+    - 404 if Vendor is not found
+    - 500 Internal Server Error for connection issues
+    """
+    user = request.user
+
+    try:
+        vendor = Vendor.objects.get(user=user)
+        print("Found vendor:", vendor)
+    except Vendor.DoesNotExist:
+        return Response({"error": "Vendor not found"}, status=404)
+
+    if not vendor.paystack_secret:
+        return Response({"error": "Vendor has not connected Paystack"}, status=400)
+
+    headers = {
+        "Authorization": f"Bearer {vendor.paystack_secret}",
+        "Content-Type": "application/json"
+    }
+
+    url = "https://api.paystack.co/customer"
+
+    try:
+        res = requests.get(url, headers=headers)
+        data = res.json()
+
+        if res.status_code == 200 and data.get("status") is True:
+            return Response(data.get("data", []), status=200)
+        else:
+            return Response({"error": data.get("message", "Failed to fetch customers")}, status=400)
+
+    except requests.exceptions.RequestException as e:
+        print("Paystack request error:", e)
+        return Response({"error": "Failed to connect to Paystack"}, status=500)
