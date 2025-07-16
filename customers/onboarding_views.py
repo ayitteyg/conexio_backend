@@ -1,6 +1,7 @@
 
 
 # Create your views here.
+from django.conf import settings
 import requests
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
@@ -9,7 +10,8 @@ from rest_framework import status
 from rest_framework_simplejwt.tokens import RefreshToken, TokenError
 from django.contrib.auth import authenticate
 from django.contrib.auth.decorators import login_required
-from .models import Vendor, SubscriptionPlan
+from .models import Vendor, SubscriptionPlan, Feature
+from .serializers import FeatureSerializer, SubscriptionPlanSerializer
 
 from django.contrib.auth import get_user_model
 User = get_user_model()
@@ -57,6 +59,39 @@ def signup(request):
     }, status=status.HTTP_201_CREATED)
 
 
+
+@api_view(['GET', 'POST'])
+def list_create_features(request):
+    """GET: List all features; POST: Create a new feature."""
+    if request.method == 'GET':
+        features = Feature.objects.all()
+        serializer = FeatureSerializer(features, many=True)
+        return Response(serializer.data)
+
+    elif request.method == 'POST':
+        serializer = FeatureSerializer(data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+
+@api_view(['GET', 'POST'])
+def list_create_subscription_plans(request):
+    """GET: List all subscription plans; POST: Create a new plan with features."""
+    if request.method == 'GET':
+        plans = SubscriptionPlan.objects.all()
+        serializer = SubscriptionPlanSerializer(plans, many=True)
+        return Response(serializer.data)
+
+    elif request.method == 'POST':
+        serializer = SubscriptionPlanSerializer(data=request.data)
+        if serializer.is_valid():
+            plan = serializer.save()
+            plan.features.set(serializer.validated_data['features'])  # link features
+            return Response(SubscriptionPlanSerializer(plan).data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
 @api_view(['POST'])
@@ -113,23 +148,45 @@ def create_vendor(request):
     if Vendor.objects.filter(user=user).exists():
         return Response({"error": "Vendor already exists for this user"}, status=400)
 
-    subscription_id = data.get("subscription_plan_id")
-    try:
-        subscription = SubscriptionPlan.objects.get(id=subscription_id) if subscription_id else None
-    except SubscriptionPlan.DoesNotExist:
-        return Response({"error": "Invalid subscription plan"}, status=400)
+    # Step 1: Ensure default features exist
+    default_features = [
+        {"name": "Email Support", "description": "Get support via email"},
+        {"name": "Basic Reports", "description": "Access to basic analytics"},
+    ]
 
-    vendor = Vendor.objects.create(
+    feature_objs = []
+    for feat in default_features:
+        feature, _ = Feature.objects.get_or_create(name=feat["name"], defaults={"description": feat["description"]})
+        feature_objs.append(feature)
+
+    # Step 2: Create or get the 'basic' plan and assign default features
+    basic_plan, created = SubscriptionPlan.objects.get_or_create(name='basic')
+    if created:
+        basic_plan.features.set(feature_objs)  # Assign only if newly created
+
+    # Step 3: Create the vendor : request.post.data
+    # vendor = Vendor.objects.create(
+    #     user=user,
+    #     fullname=data.get("fullname"),
+    #     biz_name=data.get("biz_name", ""),
+    #     biz_location=data.get("biz_location", ""),
+    #     biz_contact=data.get("biz_contact", ""),
+    #     biz_mail=data.get("biz_mail", ""),
+    #     subscription_plan=basic_plan
+    # )
+
+    vendor = Vendor.objects.get_or_create(
         user=user,
-        fullname=data.get("fullname"),
-        biz_name=data.get("biz_name", ""),
-        biz_location=data.get("biz_location", ""),
-        biz_contact=data.get("biz_contact", ""),
-        biz_mail=data.get("biz_mail", ""),
-        subscription_plan=subscription
+        fullname="vendor1",
+        biz_name="Kwame Foods",
+        biz_location="Accra",
+        biz_contact="0244000000",
+        biz_mail="kwame@example.com",
+        subscription_plan=basic_plan
     )
 
     return Response({"message": "Vendor created successfully", "vendor_id": vendor.id}, status=201)
+
 
  
  
@@ -171,8 +228,11 @@ def initiate_subscription(request):
     if not vendor.paystack_secret:
         return Response({"error": "Vendor has not connected Paystack"}, status=400)
 
-    email = request.data.get("email")
-    amount = request.data.get("amount")
+    #email = request.data.get("email")
+    #amount = request.data.get("amount")
+    
+    email = vendor.user.email
+    amount = 100
 
     if not email or not amount:
         return Response({"error": "Email and amount are required"}, status=400)
@@ -185,7 +245,7 @@ def initiate_subscription(request):
     payload = {
         "email": email,
         "amount": amount,
-        "callback_url": "https://yourdomain.com/api/verify-subscription/"
+        "callback_url": settings.PAYSTACK_CALLBACK_URL
     }
 
     response = requests.post(
@@ -205,6 +265,10 @@ def initiate_subscription(request):
             "error": "Failed to initiate payment",
             "details": response.json()
         }, status=400)
+
+
+
+
 
 
 
@@ -278,3 +342,78 @@ def get_paystack_customers(request):
     except requests.exceptions.RequestException as e:
         print("Paystack request error:", e)
         return Response({"error": "Failed to connect to Paystack"}, status=500)
+
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def full_paystack_onboard(request):
+    user = request.user
+    paystack_secret = request.data.get("paystack_secret")
+
+    if not paystack_secret or not paystack_secret.startswith("sk_"):
+        return Response({"error": "Invalid Paystack secret key"}, status=400)
+
+    # Step 1: Ensure default features exist
+    default_features = [
+        {"name": "Email Support", "description": "Get support via email"},
+        {"name": "Basic Reports", "description": "Access to basic analytics"},
+    ]
+    feature_objs = []
+    for feat in default_features:
+        feature, _ = Feature.objects.get_or_create(
+            name=feat["name"],
+            defaults={"description": feat["description"]}
+        )
+        feature_objs.append(feature)
+
+    # Step 2: Create or get the 'basic' plan and assign default features if new
+    basic_plan, created = SubscriptionPlan.objects.get_or_create(name='basic')
+    if created:
+        basic_plan.features.set(feature_objs)  # Only assign features if newly created
+
+
+    # Step 3: Create or get Vendor
+    vendor, created = Vendor.objects.get_or_create(
+        user=user,
+        defaults={
+            "fullname": "vendor 1",
+            "subscription_plan": basic_plan,
+            "biz_name": "Inovation labs",
+            "biz_location": "Accra - Ghana",
+            "biz_contact": "0000000000",
+            "biz_mail": user.email,
+        }
+    )
+
+    # Step 4: Save Paystack secret
+    vendor.paystack_secret = paystack_secret
+    vendor.paystack_connected = True
+    vendor.subscription_plan = basic_plan  # ensure even existing ones get it
+    vendor.save()
+
+    # Step 5: Initiate Paystack Transaction
+    headers = {
+        "Authorization": f"Bearer {paystack_secret}",
+        "Content-Type": "application/json"
+    }
+    payload = {
+        "email": user.email,
+        "amount": 100 * 100,  # Paystack uses Kobo
+        "callback_url": settings.PAYSTACK_CALLBACK_URL
+    }
+
+    response = requests.post("https://api.paystack.co/transaction/initialize", headers=headers, json=payload)
+
+    if response.status_code == 200 and response.json().get("status"):
+        data = response.json()["data"]
+        return Response({
+            "message": "Onboarding complete. Redirect to payment page.",
+            "authorization_url": data["authorization_url"],
+            "reference": data["reference"]
+        })
+
+    return Response({
+        "error": "Failed to initiate payment",
+        "details": response.json()
+    }, status=400)

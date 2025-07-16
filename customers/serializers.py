@@ -1,6 +1,6 @@
 from rest_framework import serializers
 from django.contrib.auth.models import User
-from .models import Vendor
+from .models import Vendor, Feature, SubscriptionPlan
 
 
 class UserSerializer(serializers.ModelSerializer):
@@ -33,3 +33,19 @@ class VendorListSerializer(serializers.ModelSerializer):
             "id", "fullname", "biz_name", "biz_location", "biz_contact", "biz_mail",
             "subscription_plan", "paystack_connected", "subscription_active"
         ]
+
+
+
+class FeatureSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Feature
+        fields = ['id', 'name', 'description']
+
+class SubscriptionPlanSerializer(serializers.ModelSerializer):
+    features = serializers.PrimaryKeyRelatedField(
+        many=True, queryset=Feature.objects.all()
+    )
+
+    class Meta:
+        model = SubscriptionPlan
+        fields = ['id', 'name', 'features']

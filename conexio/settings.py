@@ -217,6 +217,11 @@ SIMPLE_JWT = {
 }
 
 
+# settings.py
+PAYSTACK_CALLBACK_URL = os.getenv("PAYSTACK_CALLBACK_URL", "http://127.0.0.1:8000/api/verify-subscription/")
+
+
+
 # Internationalization
 # https://docs.djangoproject.com/en/5.2/topics/i18n/
 

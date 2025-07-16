@@ -50,6 +50,8 @@ class SubscriptionPlan(models.Model):
         return [f.name for f in self.features.all()]
 
 
+
+
 class Vendor(models.Model):
     """ clients are linked to subscription plan with get_features function
         example:
