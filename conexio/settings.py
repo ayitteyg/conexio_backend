@@ -219,6 +219,7 @@ SIMPLE_JWT = {
 
 # settings.py
 PAYSTACK_CALLBACK_URL = os.getenv("PAYSTACK_CALLBACK_URL", "http://127.0.0.1:8000")
+PAYSTACK_KEY = os.getenv("PAYSTACK_KEY")
 
 
 

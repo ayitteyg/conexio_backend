@@ -349,7 +349,8 @@ def get_paystack_customers(request):
 @permission_classes([IsAuthenticated])
 def full_paystack_onboard(request):
     user = request.user
-    paystack_secret = request.data.get("paystack_secret", "sk_test_d027c461c9e38b4ebd0a1fc5e6ecc37ff427af24")
+    PAYSTACK_KEY =  settings.PAYSTACK_KEY
+    paystack_secret = request.data.get("paystack_secret", PAYSTACK_KEY)
 
     if not paystack_secret or not paystack_secret.startswith("sk_"):
         return Response({"error": "Invalid Paystack secret key"}, status=400)
