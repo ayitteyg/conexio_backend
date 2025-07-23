@@ -63,7 +63,7 @@ INSTALLED_APPS = [
     'rest_framework_simplejwt.token_blacklist',  # ✅ This is REQUIRED for deleting tokens / signing out user
 
     # Your custom apps
-    'customers',                   # ✅ Your app
+    'customers.apps.CustomersConfig',  # NOT just 'customers'                  # ✅ Your app
 ]
 
 

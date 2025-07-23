@@ -80,50 +80,32 @@ class Vendor(models.Model):
             return self.subscription_plan.get_feature_list()
         return []
 
-
     
-class Customer(models.Model):
-    """
-    STORES CUSTOMER DATA WITH BEHAVIORAL ATTRIBUTES
-    """
-    vendor = models.ForeignKey(Vendor, on_delete=models.CASCADE)
-    email = models.EmailField(unique=True)
-    
-    # Store segments as a comma-separated string or JSON string
-    segments = models.TextField(default="[]")  # Store JSON list as string
+class PaystackCustomer(models.Model):
+    """ create a paystack customer """
+    vendor = models.ForeignKey(Vendor, on_delete=models.CASCADE, related_name="customers")
+    customer_code = models.CharField(max_length=100, unique=True)
+    email = models.EmailField()
+    first_name = models.CharField(max_length=100, blank=True, null=True)
+    last_name = models.CharField(max_length=100, blank=True, null=True)
+    phone = models.CharField(max_length=20, blank=True, null=True)
+    created_at = models.DateTimeField()
 
-    # Store behavior_data as a JSON string
-    behavior_data = models.TextField(default="{}")  # Store JSON dict as string
+    def __str__(self):
+        return self.email
 
+
+
+class PaystackTransaction(models.Model):
+    customer = models.ForeignKey(PaystackCustomer, on_delete=models.CASCADE, related_name="transactions")
+    transaction_code = models.CharField(max_length=100, unique=True)
+    amount = models.DecimalField(max_digits=10, decimal_places=2)
+    currency = models.CharField(max_length=10, default="NGN")
+    status = models.CharField(max_length=50)  # e.g. 'success', 'failed'
+    paid_at = models.DateTimeField()
+    reference = models.CharField(max_length=100, unique=True)
+    channel = models.CharField(max_length=100, blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
-    def set_segments(self, segments_list):
-        self.segments = json.dumps(segments_list)
-
-    def get_segments(self):
-        return json.loads(self.segments or "[]")
-
-    def set_behavior_data(self, data_dict):
-        self.behavior_data = json.dumps(data_dict)
-
-    def get_behavior_data(self):
-        return json.loads(self.behavior_data or "{}")
-
-
-
-class Campaign(models.Model):
-    """
-    AUTOMATED MARKETING CAMPAIGN CONFIG
-    
-    Trigger Types:
-        - purchase: Post-purchase sequence
-        - inactive: Re-engagement flow
-    """
-    TRIGGER_TYPES = [
-        ('purchase', 'After Purchase'),
-        ('inactive', 'Customer Inactive'),
-    ]
-    vendor = models.ForeignKey(Vendor, on_delete=models.CASCADE)
-    trigger_type = models.CharField(max_length=50, choices=TRIGGER_TYPES)
-    delay_hours = models.PositiveIntegerField()
-    message_template = models.TextField()
+    def __str__(self):
+        return f"{self.customer.email} - {self.amount} ({self.status})"

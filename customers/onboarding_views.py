@@ -10,8 +10,12 @@ from rest_framework import status
 from rest_framework_simplejwt.tokens import RefreshToken, TokenError
 from django.contrib.auth import authenticate
 from django.contrib.auth.decorators import login_required
-from .models import Vendor, SubscriptionPlan, Feature
+from .models import Vendor, SubscriptionPlan, Feature, PaystackCustomer
 from .serializers import FeatureSerializer, SubscriptionPlanSerializer
+from django.utils.timezone import now
+from .utils import generate_dummy_transactions_for_customer
+from django.db.models import Sum, Max
+from django.utils.timesince import timesince
 
 from django.contrib.auth import get_user_model
 User = get_user_model()
@@ -270,8 +274,6 @@ def initiate_subscription(request):
 
 
 
-
-
 # verify vendor subscription transactions
 @api_view(['GET'])
 def verify_transaction(request, reference):
@@ -298,7 +300,7 @@ def verify_transaction(request, reference):
 #getting client customers
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
-def get_paystack_customers(request):
+def get_paystack_customers_1(request):
     """
     Retrieve all customers from the Paystack account linked to the authenticated vendor.
 
@@ -345,6 +347,51 @@ def get_paystack_customers(request):
 
 
 
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_paystack_customers(request):
+    vendor = request.user.vendor  # Assuming vendor is linked to user
+
+    customers = PaystackCustomer.objects.filter(vendor=vendor)
+
+    data = []
+    for customer in customers:
+        transactions = customer.transactions.filter(status="success")
+        total_spent = transactions.aggregate(total=Sum("amount"))["total"] or 0
+        last_tx = transactions.aggregate(last=Max("paid_at"))["last"]
+
+        # Format name
+        name = f"{customer.first_name or ''} {customer.last_name or ''}".strip()
+
+        # Calculate lastOrder as relative time
+        if last_tx:
+            time_ago = timesince(last_tx, now())  # e.g. "2 days, 3 hours"
+            last_order = time_ago.split(",")[0] + " ago"
+        else:
+            last_order = "No Orders"
+
+        # Determine status based on rules
+        if total_spent > 4000:
+            status = "High Value"
+        elif last_tx and (now() - last_tx).days > 21:
+            status = "At Risk"
+        else:
+            status = "Active"
+
+        data.append({
+            "name": name or customer.email.split('@')[0].title(),
+            "email": customer.email,
+            "totalValue": f"${total_spent:,.0f}",
+            "lastOrder": last_order,
+            "status": status
+        })
+
+    return Response({"customers": data})
+
+
+
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def full_paystack_onboard(request):
@@ -378,14 +425,14 @@ def full_paystack_onboard(request):
     vendor, created = Vendor.objects.get_or_create(
         user=user,
         defaults={
-            "fullname": "vendor 1",
+            "fullname": "vendorfullname",
             "subscription_plan": basic_plan,
-            "biz_name": "Inovation labs",
-            "biz_location": "Accra - Ghana",
-            "biz_contact": "0000000000",
+            "biz_name": "",
+            "biz_location": "",
+            "biz_contact": "",
             "biz_mail": user.email,
         }
-    )
+    )   
 
     # Step 4: Save Paystack secret
     vendor.paystack_secret = paystack_secret
@@ -398,6 +445,43 @@ def full_paystack_onboard(request):
         "Authorization": f"Bearer {paystack_secret}",
         "Content-Type": "application/json"
     }
+    
+    
+    # Step 6: Manually create PaystackCustomer if not created by signal
+
+    # Only create if not already created
+    if not PaystackCustomer.objects.filter(vendor=vendor).exists():
+        headers = {
+            "Authorization": f"Bearer {paystack_secret}",
+            "Content-Type": "application/json",
+        }
+        data = {
+            "email": vendor.biz_mail,
+            "first_name": vendor.fullname,
+        }
+
+        response = requests.post("https://api.paystack.co/customer", headers=headers, json=data)
+        res = response.json()
+
+        if res.get("status"):
+            customer_data = res["data"]
+            customer = PaystackCustomer.objects.create(
+                vendor=vendor,
+                customer_code=customer_data["customer_code"],
+                email=customer_data["email"],
+                first_name=customer_data.get("first_name", "firstname"),
+                last_name=customer_data.get("last_name", "lastname"),
+                phone=customer_data.get("phone", ""),
+                created_at=now()
+            )
+    
+    # step 7: 
+        #create dummy customer data for testing
+        generate_dummy_transactions_for_customer(customer) 
+        
+    
+    # step8: initiate a transaction for testing purpose   
+        
     payload = {
         "email": user.email,
         "amount": 100 * 100,  # Paystack uses Kobo

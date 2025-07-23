@@ -1,104 +1,89 @@
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
-from .models import Vendor
-from datetime import datetime, timedelta
+from .models import PaystackCustomer, PaystackTransaction, Vendor
 import requests
+from django.utils import timezone
+from datetime import timedelta, datetime
+import pytz 
+
+
 
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def vendor_dashboard(request):
-    """
-    Returns vendor dashboard analytics:
-    - Total customers
-    - Total successful orders
-    - Average order value
-    - Segment counts: loyal, high-value, at-risk, dormant
-    """
-
     user = request.user
-
     try:
         vendor = Vendor.objects.get(user=user)
     except Vendor.DoesNotExist:
         return Response({"error": "Vendor not found"}, status=404)
 
-    if not vendor.paystack_secret:
-        return Response({"error": "Paystack not connected"}, status=400)
+    customers = PaystackCustomer.objects.filter(vendor=vendor)
+    transactions = PaystackTransaction.objects.filter(customer__vendor=vendor, status="success")
 
-    headers = {
-        "Authorization": f"Bearer {vendor.paystack_secret}"
-    }
-
-    # Customers
-    customers_res = requests.get("https://api.paystack.co/customer", headers=headers).json()
-    customers = customers_res.get("data", [])
-
-    # Transactions
-    tx_res = requests.get("https://api.paystack.co/transaction", headers=headers, params={"perPage": 100}).json()
-    transactions = [tx for tx in tx_res.get("data", []) if tx.get("status") == "success"]
-
-    # Calculate totals
-    total_customers = len(customers)
-    total_orders = len(transactions)
-    total_value = sum(tx.get("amount", 0) / 100 for tx in transactions)
+    total_customers = customers.count()
+    total_orders = transactions.count()
+    total_value = sum(tx.amount for tx in transactions) / 100
     avg_order_value = round(total_value / total_orders, 2) if total_orders else 0
 
-    # Build customer transaction map
+    from datetime import datetime, timedelta
+
     tx_map = {}
     for tx in transactions:
-        cust_code = tx.get("customer", {}).get("customer_code")
-        if cust_code:
-            tx_map.setdefault(cust_code, []).append(tx)
+        tx_map.setdefault(tx.customer.customer_code, []).append(tx)
 
-    now = datetime.utcnow()
-    loyal, high_value, at_risk, dormant = [], [], [], []
+    
+    
+    now = timezone.now()
+    loyal = high_value = at_risk = dormant = 0
 
     for customer in customers:
-        code = customer.get("customer_code")
-        txs = tx_map.get(code, [])
-        total_spent = sum(tx["amount"] / 100 for tx in txs)
+        txs = tx_map.get(customer.customer_code, [])
+        total_spent = sum(tx.amount for tx in txs) / 100
         order_count = len(txs)
+        last_tx_date = max((tx.paid_at for tx in txs), default=None)
 
-        last_tx_date = max(
-            (datetime.strptime(tx["paid_at"], "%Y-%m-%dT%H:%M:%S.%fZ") for tx in txs),
-            default=None
-        )
+        # Convert transaction dates to timezone-aware datetimes
+        txs_with_dates = []
+        for tx in txs:
+            tx_date = tx.paid_at 
+            txs_with_dates.append((tx, tx_date))
+
+        last_tx_date = max((tx_date for _, tx_date in txs_with_dates), default=None)
 
         # Loyal: ≥3 orders in last 90 days
-        if order_count >= 3:
-            recent = [
-                tx for tx in txs
-                if datetime.strptime(tx["paid_at"], "%Y-%m-%dT%H:%M:%S.%fZ") >= now - timedelta(days=90)
-            ]
-            if len(recent) >= 3:
-                loyal.append(customer)
+        recent_order_count = sum(
+            1 for _, tx_date in txs_with_dates
+            if tx_date >= now - timedelta(days=90)
+        )
+        if order_count >= 3 and recent_order_count >= 3:
+            loyal += 1
 
         # High value: spent > 500
         if total_spent > 500:
-            high_value.append(customer)
+            high_value += 1
 
         # At-risk: last order ≥ 30 days ago
         if last_tx_date and (now - last_tx_date).days >= 30:
-            at_risk.append(customer)
+            at_risk += 1
 
         # Dormant: no tx or inactive ≥ 90 days
         if not txs or (last_tx_date and (now - last_tx_date).days >= 90):
-            dormant.append(customer)
-
-    return Response({
-        "total_customers": total_customers,
-        "total_orders": total_orders,
-        "average_order_value": avg_order_value,
-        "segments": {
-            "loyal_customers": len(loyal),
-            "high_value_customers": len(high_value),
-            "at_risk_customers": len(at_risk),
-            "dormant_customers": len(dormant),
-        }
-    })
-
+            dormant += 1
+        
+        
+        return Response({
+            "total_customers": total_customers,
+            "total_orders": total_orders,
+            "average_order_value": avg_order_value,
+            "segments": {
+                "loyal_customers": loyal,
+                "high_value_customers": high_value,
+                "at_risk_customers": at_risk,
+                "dormant_customers": dormant,
+            }
+        })
 
 
 
