@@ -13,7 +13,10 @@ from django.contrib.auth.decorators import login_required
 from .models import Vendor, SubscriptionPlan, Feature, PaystackCustomer
 from .serializers import FeatureSerializer, SubscriptionPlanSerializer
 from django.utils.timezone import now
-from .utils import generate_dummy_transactions_for_customer
+from .utils import (generate_dummy_transactions_for_customer,
+                    generate_dummy_customers_and_transactions,
+                    generate_dummy_customers_for_vendor,
+                    generate_dummy_customers_and_transactions)
 from django.db.models import Sum, Max
 from django.utils.timesince import timesince
 
@@ -440,48 +443,15 @@ def full_paystack_onboard(request):
     vendor.subscription_plan = basic_plan  # ensure even existing ones get it
     vendor.save()
 
-    # Step 5: Initiate Paystack Transaction
+    generate_dummy_customers_and_transactions(vendor, count=30, tx_per_customer=10)
+    
+    # step8: initiate a transaction for testing purpose   
+    
     headers = {
         "Authorization": f"Bearer {paystack_secret}",
         "Content-Type": "application/json"
     }
     
-    
-    # Step 6: Manually create PaystackCustomer if not created by signal
-
-    # Only create if not already created
-    if not PaystackCustomer.objects.filter(vendor=vendor).exists():
-        headers = {
-            "Authorization": f"Bearer {paystack_secret}",
-            "Content-Type": "application/json",
-        }
-        data = {
-            "email": vendor.biz_mail,
-            "first_name": vendor.fullname,
-        }
-
-        response = requests.post("https://api.paystack.co/customer", headers=headers, json=data)
-        res = response.json()
-
-        if res.get("status"):
-            customer_data = res["data"]
-            customer = PaystackCustomer.objects.create(
-                vendor=vendor,
-                customer_code=customer_data["customer_code"],
-                email=customer_data["email"],
-                first_name=customer_data.get("first_name", "firstname"),
-                last_name=customer_data.get("last_name", "lastname"),
-                phone=customer_data.get("phone", ""),
-                created_at=now()
-            )
-    
-    # step 7: 
-        #create dummy customer data for testing
-        generate_dummy_transactions_for_customer(customer) 
-        
-    
-    # step8: initiate a transaction for testing purpose   
-        
     payload = {
         "email": user.email,
         "amount": 100 * 100,  # Paystack uses Kobo

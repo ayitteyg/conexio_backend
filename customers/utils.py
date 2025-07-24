@@ -7,6 +7,8 @@ from datetime import datetime
 import random
 import uuid
 from django.utils.timezone import now, timedelta
+import faker
+
 
 
 
@@ -88,3 +90,73 @@ def generate_dummy_transactions_for_customer(customer):
 
 
 
+
+
+fake = faker.Faker()
+
+def generate_dummy_customers_for_vendor(vendor):
+    """
+    Generate 30 dummy PaystackCustomer entries for the given Vendor.
+    Useful for testing frontend customer dashboard.
+    """
+    for i in range(30):
+        name = fake.name()
+        email = fake.unique.email()
+        customer_code = f"DUMMY-CUST-{vendor.id}-{i}-{random.randint(1000, 9999)}"
+        created_at = now() - timedelta(days=random.randint(1, 180))
+
+        PaystackCustomer.objects.create(
+            vendor=vendor,
+            name=name,
+            email=email,
+            customer_code=customer_code,
+            created_at=created_at,
+        )
+
+
+
+def generate_dummy_customers_and_transactions(vendor):
+    for i in range(30):
+        name = fake.name()
+        email = fake.unique.email()
+        customer_code = f"DUMMY-CUST-{vendor.id}-{i}-{random.randint(1000, 9999)}"
+        created_at = now() - timedelta(days=random.randint(1, 180))
+
+        customer = PaystackCustomer.objects.create(
+            vendor=vendor,
+            name=name,
+            email=email,
+            customer_code=customer_code,
+            created_at=created_at,
+        )
+
+        generate_dummy_transactions_for_customer(customer)
+
+
+
+
+import string
+def generate_dummy_customers_and_transactions(vendor, count=30, tx_per_customer=10):
+    for _ in range(count):
+        email = f"{''.join(random.choices(string.ascii_lowercase, k=6))}@example.com"
+        customer = PaystackCustomer.objects.create(
+            vendor=vendor,
+            customer_code='DUMMY_' + ''.join(random.choices(string.ascii_uppercase + string.digits, k=10)),
+            email=email,
+            first_name="Test",
+            last_name="Customer",
+            phone="0550000000",
+            created_at=now()
+        )
+
+        for _ in range(tx_per_customer):
+            amount = round(random.uniform(1000, 10000), 2)  # 10.00 to 100.00 NGN in Kobo
+            PaystackTransaction.objects.create(
+                customer=customer,
+                transaction_code="TXC-" + ''.join(random.choices(string.ascii_uppercase + string.digits, k=10)),
+                amount=amount,
+                status="success",
+                paid_at=now(),
+                reference="TXR-" + ''.join(random.choices(string.ascii_uppercase + string.digits, k=12)),
+                channel="card"
+            )
