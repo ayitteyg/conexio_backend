@@ -12,83 +12,6 @@ from django.core.cache import cache
 
 
 
-# @api_view(["GET"])
-# @permission_classes([IsAuthenticated])
-# def vendor_dashboard(request):
-#     user = request.user
-#     try:
-#         vendor = Vendor.objects.get(user=user)
-#     except Vendor.DoesNotExist:
-#         return Response({"error": "Vendor not found"}, status=404)
-
-#     customers = PaystackCustomer.objects.filter(vendor=vendor)
-#     transactions = PaystackTransaction.objects.filter(customer__vendor=vendor, status="success")
-
-#     total_customers = customers.count()
-#     total_orders = transactions.count()
-#     total_value = sum(tx.amount for tx in transactions) / 100
-#     avg_order_value = round(total_value / total_orders, 2) if total_orders else 0
-
-#     from datetime import datetime, timedelta
-
-#     tx_map = {}
-#     for tx in transactions:
-#         tx_map.setdefault(tx.customer.customer_code, []).append(tx)
-
-    
-    
-#     now = timezone.now()
-#     loyal = high_value = at_risk = dormant = 0
-
-#     for customer in customers:
-#         txs = tx_map.get(customer.customer_code, [])
-#         total_spent = sum(tx.amount for tx in txs) / 100
-#         order_count = len(txs)
-#         last_tx_date = max((tx.paid_at for tx in txs), default=None)
-
-#         # Convert transaction dates to timezone-aware datetimes
-#         txs_with_dates = []
-#         for tx in txs:
-#             tx_date = tx.paid_at 
-#             txs_with_dates.append((tx, tx_date))
-
-#         last_tx_date = max((tx_date for _, tx_date in txs_with_dates), default=None)
-
-#         # Loyal: ≥3 orders in last 90 days
-#         recent_order_count = sum(
-#             1 for _, tx_date in txs_with_dates
-#             if tx_date >= now - timedelta(days=90)
-#         )
-#         if order_count >= 3 and recent_order_count >= 3:
-#             loyal += 1
-
-#         # High value: spent > 500
-#         if total_spent > 500:
-#             high_value += 1
-
-#         # At-risk: last order ≥ 30 days ago
-#         if last_tx_date and (now - last_tx_date).days >= 30:
-#             at_risk += 1
-
-#         # Dormant: no tx or inactive ≥ 90 days
-#         if not txs or (last_tx_date and (now - last_tx_date).days >= 90):
-#             dormant += 1
-        
-        
-#         return Response({
-#             "total_customers": total_customers,
-#             "total_orders": total_orders,
-#             "average_order_value": avg_order_value,
-#             "segments": {
-#                 "loyal_customers": loyal,
-#                 "high_value_customers": high_value,
-#                 "at_risk_customers": at_risk,
-#                 "dormant_customers": dormant,
-#             }
-#         })
-
-
-
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def vendor_dashboard(request):
@@ -125,7 +48,7 @@ def vendor_dashboard(request):
     # Prefetch successful transactions per customer
     transactions_qs = PaystackTransaction.objects.filter(status="success")
     customers = PaystackCustomer.objects.filter(vendor=vendor).prefetch_related(
-        Prefetch("paystacktransaction_set", queryset=transactions_qs)
+        Prefetch("transactions", queryset=transactions_qs)
     )
 
     # All transactions
