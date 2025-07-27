@@ -66,7 +66,7 @@ def vendor_dashboard(request):
     loyal = high_value = at_risk = dormant = 0
 
     for customer in customers:
-        txs = customer.paystacktransaction_set.all()
+        txs = customer.transactions.all()
         order_count = txs.count()
         total_spent = sum(tx.amount for tx in txs) / 100  # Convert to naira
         last_tx_date = max((tx.paid_at for tx in txs), default=None)
