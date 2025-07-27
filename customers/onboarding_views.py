@@ -6,19 +6,13 @@ import requests
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
-from rest_framework import status
-from rest_framework_simplejwt.tokens import RefreshToken, TokenError
-from django.contrib.auth import authenticate
-from django.contrib.auth.decorators import login_required
-from .models import Vendor, SubscriptionPlan, Feature, PaystackCustomer
-from .serializers import FeatureSerializer, SubscriptionPlanSerializer
+from .models import PaystackTransaction, Vendor, SubscriptionPlan, Feature, PaystackCustomer
 from django.utils.timezone import now
-from .utils import (generate_dummy_transactions_for_customer,
-                    generate_dummy_customers_and_transactions,
-                    generate_dummy_customers_for_vendor,
-                    generate_dummy_customers_and_transactions)
+from .utils import (generate_dummy_customers_and_transactions)
 from django.db.models import Sum, Max
 from django.utils.timesince import timesince
+from django.db.models import Sum, Prefetch
+from django.core.cache import cache
 
 from django.contrib.auth import get_user_model
 User = get_user_model()
@@ -26,180 +20,12 @@ User = get_user_model()
 
 
 
-
-
-@api_view(['POST'])
-def signup(request):
-    username = request.data.get('username')
-    email = request.data.get('email')
-    password1 = request.data.get('password1')
-    password2 = request.data.get('password2')
-
-    # Check if all fields are provided
-    if not all([username, email, password1, password2]):
-        return Response({'message': 'All fields are required.', 'status': False},
-                        status=status.HTTP_400_BAD_REQUEST)
-
-    if User.objects.filter(username=username).exists():
-        return Response({'message': f'{username} already exists', 'status': False},
-                        status=status.HTTP_400_BAD_REQUEST)
-
-    if User.objects.filter(email=email).exists():
-        return Response({'message': f'{email} already exists', 'status': False},
-                        status=status.HTTP_400_BAD_REQUEST)
-
-    if password1 != password2:
-        return Response({'message': 'Password mismatch', 'status': False},
-                        status=status.HTTP_400_BAD_REQUEST)
-
-    # Create user securely
-    user = User.objects.create_user(username=username, email=email, password=password1)
-    user.save()
-
-    # Generate JWT token
-    refresh = RefreshToken.for_user(user)
-    return Response({
-        'message': 'Signup Successful, Login to complete registration',
-        'status': True,
-        'refresh': str(refresh),
-        'access': str(refresh.access_token),
-    }, status=status.HTTP_201_CREATED)
-
-
-
-@api_view(['GET', 'POST'])
-def list_create_features(request):
-    """GET: List all features; POST: Create a new feature."""
-    if request.method == 'GET':
-        features = Feature.objects.all()
-        serializer = FeatureSerializer(features, many=True)
-        return Response(serializer.data)
-
-    elif request.method == 'POST':
-        serializer = FeatureSerializer(data=request.data)
-        if serializer.is_valid():
-            serializer.save()
-            return Response(serializer.data, status=status.HTTP_201_CREATED)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
-
-
-@api_view(['GET', 'POST'])
-def list_create_subscription_plans(request):
-    """GET: List all subscription plans; POST: Create a new plan with features."""
-    if request.method == 'GET':
-        plans = SubscriptionPlan.objects.all()
-        serializer = SubscriptionPlanSerializer(plans, many=True)
-        return Response(serializer.data)
-
-    elif request.method == 'POST':
-        serializer = SubscriptionPlanSerializer(data=request.data)
-        if serializer.is_valid():
-            plan = serializer.save()
-            plan.features.set(serializer.validated_data['features'])  # link features
-            return Response(SubscriptionPlanSerializer(plan).data, status=status.HTTP_201_CREATED)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
-
-@api_view(['POST'])
-def signin(request):
-    username = request.data.get('username')
-    password = request.data.get('password')
-
-    if not username or not password:
-        return Response({'message': 'Username and password are required', 'status': False},
-                        status=status.HTTP_400_BAD_REQUEST)
-
-    user = authenticate(username=username, password=password)
-    if user is not None:
-        refresh = RefreshToken.for_user(user)
-
-        return Response({
-            'message': 'Login successful',
-            'status': True,
-            'refresh': str(refresh),
-            'access': str(refresh.access_token)
-        }, status=status.HTTP_200_OK)
-    
-    return Response({'message': 'Invalid credentials', 'status': False},
-                    status=status.HTTP_401_UNAUTHORIZED)
-
-
-
-
-@api_view(['POST'])
-def signout(request):
-    try:
-        refresh_token = request.data["refresh"]
-        token = RefreshToken(refresh_token)
-        token.blacklist()
-
-        return Response({"message": "logged out successfully", "status": True},
-                        status=status.HTTP_205_RESET_CONTENT)
-    except KeyError:
-        return Response({"message": "Refresh token is required", "status": False},
-                        status=status.HTTP_400_BAD_REQUEST)
-    except TokenError:
-        return Response({"message": "Invalid or expired token", "status": False},
-                        status=status.HTTP_400_BAD_REQUEST)
-
-
-
-
-@api_view(['POST'])
-@permission_classes([IsAuthenticated])
-def create_vendor(request):
-    user = request.user
-    data = request.data
-
-    if Vendor.objects.filter(user=user).exists():
-        return Response({"error": "Vendor already exists for this user"}, status=400)
-
-    # Step 1: Ensure default features exist
-    default_features = [
-        {"name": "Email Support", "description": "Get support via email"},
-        {"name": "Basic Reports", "description": "Access to basic analytics"},
-    ]
-
-    feature_objs = []
-    for feat in default_features:
-        feature, _ = Feature.objects.get_or_create(name=feat["name"], defaults={"description": feat["description"]})
-        feature_objs.append(feature)
-
-    # Step 2: Create or get the 'basic' plan and assign default features
-    basic_plan, created = SubscriptionPlan.objects.get_or_create(name='basic')
-    if created:
-        basic_plan.features.set(feature_objs)  # Assign only if newly created
-
-    # Step 3: Create the vendor : request.post.data
-    # vendor = Vendor.objects.create(
-    #     user=user,
-    #     fullname=data.get("fullname"),
-    #     biz_name=data.get("biz_name", ""),
-    #     biz_location=data.get("biz_location", ""),
-    #     biz_contact=data.get("biz_contact", ""),
-    #     biz_mail=data.get("biz_mail", ""),
-    #     subscription_plan=basic_plan
-    # )
-
-    vendor = Vendor.objects.get_or_create(
-        user=user,
-        fullname="vendor1",
-        biz_name="Kwame Foods",
-        biz_location="Accra",
-        biz_contact="0244000000",
-        biz_mail="kwame@example.com",
-        subscription_plan=basic_plan
-    )
-
-    return Response({"message": "Vendor created successfully", "vendor_id": vendor.id}, status=201)
-
-
- 
  
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def connect_paystack(request):
+    """ connecting to paystack only:  """
+    
     user = request.user
     print("Authenticated user:", user)
 
@@ -224,9 +50,72 @@ def connect_paystack(request):
 
 
 
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_paystack_customers(request):
+    """
+    Returns a list of customers for the authenticated vendor,
+    including total spent, last order time, and status tag.
+
+    Optimizations:
+    - Uses `prefetch_related` to minimize DB queries
+    - Uses `annotate` to pull aggregates in one DB call
+    - Avoids redundant data processing in Python
+    """
+    vendor = request.user.vendor  # Assuming vendor FK exists
+
+    # Prefetch only successful transactions
+    successful_tx = PaystackTransaction.objects.filter(status="success")
+    customers = (
+        PaystackCustomer.objects.filter(vendor=vendor)
+        .prefetch_related(Prefetch("transactions", queryset=successful_tx))
+    )
+
+    result = []
+    current_time = now()
+
+    for customer in customers:
+        txs = customer.transactions.all()
+        total_spent = sum(tx.amount for tx in txs)
+        last_tx = max((tx.paid_at for tx in txs), default=None)
+
+        name = f"{customer.first_name or ''} {customer.last_name or ''}".strip()
+        if not name:
+            name = customer.email.split("@")[0].title()
+
+        if last_tx:
+            time_ago = timesince(last_tx, current_time).split(",")[0] + " ago"
+            last_order = time_ago
+        else:
+            last_order = "No Orders"
+
+        # Status logic
+        if total_spent > 400000:  # Adjusted to kobo if amount is stored in kobo
+            status = "High Value"
+        elif last_tx and (current_time - last_tx).days > 21:
+            status = "At Risk"
+        else:
+            status = "Active"
+
+        result.append({
+            "name": name,
+            "email": customer.email,
+            "totalValue": f"₦{total_spent/100:,.0f}",  # Convert from kobo to naira
+            "lastOrder": last_order,
+            "status": status
+        })
+
+    return Response({"customers": result})
+
+
+
+
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def initiate_subscription(request):
+    
+    """ initiating subscription for the connected account: Only """
+    
     try:
         vendor = Vendor.objects.get(user=request.user)
     except Vendor.DoesNotExist:
@@ -235,6 +124,7 @@ def initiate_subscription(request):
     if not vendor.paystack_secret:
         return Response({"error": "Vendor has not connected Paystack"}, status=400)
 
+    """ use this if a form is provided """
     #email = request.data.get("email")
     #amount = request.data.get("amount")
     
@@ -276,7 +166,6 @@ def initiate_subscription(request):
 
 
 
-
 # verify vendor subscription transactions
 @api_view(['GET'])
 def verify_transaction(request, reference):
@@ -303,58 +192,10 @@ def verify_transaction(request, reference):
 #getting client customers
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
-def get_paystack_customers_1(request):
-    """
-    Retrieve all customers from the Paystack account linked to the authenticated vendor.
-
-    Requirements:
-    - User must be authenticated
-    - Vendor must exist and have connected a Paystack secret key
-
-    Returns:
-    - 200 OK with list of customers from Paystack
-    - 400 Bad Request if Paystack is not connected or Paystack API fails
-    - 404 if Vendor is not found
-    - 500 Internal Server Error for connection issues
-    """
-    user = request.user
-
-    try:
-        vendor = Vendor.objects.get(user=user)
-        print("Found vendor:", vendor)
-    except Vendor.DoesNotExist:
-        return Response({"error": "Vendor not found"}, status=404)
-
-    if not vendor.paystack_secret:
-        return Response({"error": "Vendor has not connected Paystack"}, status=400)
-
-    headers = {
-        "Authorization": f"Bearer {vendor.paystack_secret}",
-        "Content-Type": "application/json"
-    }
-
-    url = "https://api.paystack.co/customer"
-
-    try:
-        res = requests.get(url, headers=headers)
-        data = res.json()
-
-        if res.status_code == 200 and data.get("status") is True:
-            return Response(data.get("data", []), status=200)
-        else:
-            return Response({"error": data.get("message", "Failed to fetch customers")}, status=400)
-
-    except requests.exceptions.RequestException as e:
-        print("Paystack request error:", e)
-        return Response({"error": "Failed to connect to Paystack"}, status=500)
-
-
-
-
-
-@api_view(["GET"])
-@permission_classes([IsAuthenticated])
-def get_paystack_customers(request):
+def get_paystack_customers_0(request):
+    
+    """ fetching all customer for the authenticated vendor """
+    
     vendor = request.user.vendor  # Assuming vendor is linked to user
 
     customers = PaystackCustomer.objects.filter(vendor=vendor)
@@ -398,6 +239,11 @@ def get_paystack_customers(request):
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def full_paystack_onboard(request):
+    
+    
+    """ this try to handle the whole onboarding process for a new signed up vendor at the backend """
+    
+    
     user = request.user
     PAYSTACK_KEY =  settings.PAYSTACK_KEY
     paystack_secret = request.data.get("paystack_secret", PAYSTACK_KEY)
@@ -443,6 +289,7 @@ def full_paystack_onboard(request):
     vendor.subscription_plan = basic_plan  # ensure even existing ones get it
     vendor.save()
 
+    #this is generating dummy customers and transactions for the vendor for testing purpose; see utils.py
     generate_dummy_customers_and_transactions(vendor, count=30, tx_per_customer=10)
     
     # step8: initiate a transaction for testing purpose   

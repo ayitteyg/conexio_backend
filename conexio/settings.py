@@ -217,6 +217,13 @@ SIMPLE_JWT = {
 }
 
 
+
+SENDGRID_API_KEY = os.getenv("SENDGRID_API_KEY")
+DEFAULT_FROM_EMAIL = "noreply@ayigotech.live"
+EMAIL_BACKEND = "sendgrid_backend.SendgridBackend"
+SENDGRID_SANDBOX_MODE_IN_DEBUG = False
+
+
 # settings.py
 PAYSTACK_CALLBACK_URL = os.getenv("PAYSTACK_CALLBACK_URL", "http://127.0.0.1:8000")
 PAYSTACK_KEY = os.getenv("PAYSTACK_KEY")

@@ -8,8 +8,14 @@ import random
 import uuid
 from django.utils.timezone import now, timedelta
 import faker
+fake = faker.Faker()
+import string
+from django.core.mail import send_mass_mail
+from django.conf import settings
 
-
+import os
+from sendgrid import SendGridAPIClient
+from sendgrid.helpers.mail import Mail
 
 
 
@@ -62,9 +68,6 @@ def sync_paystack_data(vendor):
 
 
 
-
-
-
 def generate_dummy_transactions_for_customer(customer):
     """
     Generates 30 dummy PaystackTransaction records for the given customer.
@@ -88,11 +91,6 @@ def generate_dummy_transactions_for_customer(customer):
             channel=random.choice(["card", "bank", "ussd", "mobile_money"]),
         )
 
-
-
-
-
-fake = faker.Faker()
 
 def generate_dummy_customers_for_vendor(vendor):
     """
@@ -134,8 +132,6 @@ def generate_dummy_customers_and_transactions(vendor):
 
 
 
-
-import string
 def generate_dummy_customers_and_transactions(vendor, count=30, tx_per_customer=10):
     for _ in range(count):
         email = f"{''.join(random.choices(string.ascii_lowercase, k=6))}@example.com"
@@ -160,3 +156,45 @@ def generate_dummy_customers_and_transactions(vendor, count=30, tx_per_customer=
                 reference="TXR-" + ''.join(random.choices(string.ascii_uppercase + string.digits, k=12)),
                 channel="card"
             )
+
+
+
+"""  sending emails  """
+def send_email_to_customers(customers, subject, message):
+    messages = []
+    for customer in customers:
+        email = customer.email
+        if email:
+            personalized_msg = message.replace("{name}", customer.first_name or "Customer")
+            messages.append((subject, personalized_msg, "noreply@customers.com", [email]))
+
+    if messages:
+        send_mass_mail(messages, fail_silently=True)
+
+
+
+"""  sending sms  """
+def send_sms_to_customers(subject, message, from_email, recipient_list):
+    pass
+
+
+
+
+def send_email_to_customers_using_sendgrid(customers, subject, message_template):
+    sg = SendGridAPIClient(api_key=os.getenv("SENDGRID_API_KEY"))
+    # sg = SendGridAPIClient(settings.SENDGRID_API_KEY)
+
+    for customer in customers:
+        if customer.email:
+            personalized_message = message_template.replace("{name}", customer.first_name or "Customer")
+            email = Mail(
+                from_email="noreply@ayigotech.live",
+                to_emails=customer.email,
+                subject=subject,
+                plain_text_content=personalized_message,
+            )
+            try:
+                sg.send(email)
+            except Exception as e:
+                print(f"Error sending to {customer.email}: {e}")
+
