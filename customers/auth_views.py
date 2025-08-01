@@ -65,8 +65,40 @@ def signup(request):
 
 
 
+# @api_view(['POST'])
+# def signin(request):
+#     username = request.data.get('username')
+#     password = request.data.get('password')
+
+#     if not username or not password:
+#         return Response({'message': 'Username and password are required', 'status': False},
+#                         status=status.HTTP_400_BAD_REQUEST)
+
+#     user = authenticate(username=username, password=password)
+#     if user is not None:
+#         refresh = RefreshToken.for_user(user)
+
+#         return Response({
+#             'message': 'Login successful',
+#             'status': True,
+#             'refresh': str(refresh),
+#             'access': str(refresh.access_token)
+#         }, status=status.HTTP_200_OK)
+    
+#     return Response({'message': 'Invalid credentials', 'status': False},
+#                     status=status.HTTP_401_UNAUTHORIZED)
+
+
+
+
+
+
 @api_view(['POST'])
 def signin(request):
+    """
+    Handles user login with JWT token generation.
+    Also checks if the user is a vendor and has completed Paystack setup.
+    """
     username = request.data.get('username')
     password = request.data.get('password')
 
@@ -76,18 +108,35 @@ def signin(request):
 
     user = authenticate(username=username, password=password)
     if user is not None:
-        refresh = RefreshToken.for_user(user)
+        # Check if user is a vendor and has a paystack key
+        try:
+            vendor = user.vendor
+            if not vendor.paystack_secret:
+                return Response({
+                    'message': 'No Paystack account found. Kindly complete your registration.',
+                    'status': False
+                }, status=status.HTTP_403_FORBIDDEN)
+        except Vendor.DoesNotExist:
+            return Response({
+                'message': 'User is not registered as a vendor.',
+                'status': False
+            }, status=status.HTTP_403_FORBIDDEN)
 
+        # All good — generate tokens
+        refresh = RefreshToken.for_user(user)
         return Response({
             'message': 'Login successful',
             'status': True,
             'refresh': str(refresh),
-            'access': str(refresh.access_token)
+            'access': str(refresh.access_token),
+            'fullname': vendor.fullname,
+            'biz_name': vendor.biz_name,
+            'paystack_connected': vendor.paystack_connected
+                  
         }, status=status.HTTP_200_OK)
-    
+
     return Response({'message': 'Invalid credentials', 'status': False},
                     status=status.HTTP_401_UNAUTHORIZED)
-
 
 
 

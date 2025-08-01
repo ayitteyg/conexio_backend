@@ -77,8 +77,8 @@ class TestSendEmailsView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
-        subject = "Test Campaign"
-        message = "Hello {name}, this is a test email from Conexio."
+        subject = "Conexio Test Campaign"
+        message = "Hello {name}, this is a test email from Conexio campaign testing."
 
         class DummyCustomer:
             def __init__(self, email, first_name):
@@ -86,12 +86,26 @@ class TestSendEmailsView(APIView):
                 self.first_name = first_name
 
         customers = [
-            DummyCustomer("ayitteyg@yahoo.com", "Test1"),
-            DummyCustomer("ayittey.og@gmail.com", "Test2"),
+            DummyCustomer("ayitteyg@yahoo.com", "George"),
+            DummyCustomer("Khadijatmamud323@gmail.com", "Khadijah"),
+            DummyCustomer("anokyefremalucia@gmail.com", "Fremah"),
+            DummyCustomer("waddo792@gmail.com", "Asiakie"),
+            DummyCustomer("cudjoredem@gmail.com", "Edem"),
+            DummyCustomer("sbas.aog@gmail.com", "Sbas"),
         ]
 
         send_email_to_customers_using_sendgrid(customers, subject, message)
         return Response({"detail": "Dummy emails sent successfully."})
+    
+    
+    
+    
+    
+
+
+
+
+
 
 
 
