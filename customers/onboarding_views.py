@@ -13,6 +13,7 @@ from django.db.models import Sum, Max
 from django.utils.timesince import timesince
 from django.db.models import Sum, Prefetch
 from django.core.cache import cache
+from django.views.decorators.csrf import csrf_exempt
 
 from django.contrib.auth import get_user_model
 User = get_user_model()
@@ -236,13 +237,13 @@ def get_paystack_customers_0(request):
 
 
 
+@csrf_exempt  # <-- Only for API, not for browser forms
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def full_paystack_onboard(request):
     
     
     """ this try to handle the whole onboarding process for a new signed up vendor at the backend """
-    
     
     user = request.user
     PAYSTACK_KEY =  settings.PAYSTACK_KEY
